@@ -1,4 +1,4 @@
-name: M31 Halium Kernel CI
+name: M31 Halium Kernel CI (Stable)
 
 on:
   workflow_dispatch:
@@ -11,65 +11,66 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install dependencies
+      # =========================
+      # Dependencies
+      # =========================
+      - name: Install deps
         run: |
           sudo apt update
           sudo apt install -y \
             bc bison build-essential flex \
             libssl-dev libelf-dev \
             python3 unzip zip \
-            cpio lz4 git curl wget
+            cpio lz4 git wget curl
 
       # =========================
-      # STABLE CLANG (AOSP PREBUILT)
+      # STABLE CLANG (Neutron - CI safe)
       # =========================
       - name: Download Clang
         run: |
-          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/main/clang-r487747.tar.gz
-          mkdir clang
-          tar -xf clang-r487747.tar.gz -C clang
+          git clone --depth=1 https://github.com/Neutron-Toolchains/clang-build.git clang
 
       # =========================
-      # BUILD
+      # Build kernel
       # =========================
-      - name: Build Kernel
+      - name: Build
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
 
+          # toolchain
           export PATH=$PWD/clang/bin:$PATH
-
-          # IMPORTANT: use LLVM linker ONLY
           export CC=clang
           export LD=ld.lld
           export LLVM=1
           export LLVM_IAS=1
 
-          # HOST tools MUST use system compiler
-          export HOSTCC=gcc
-          export HOSTCXX=g++
+          # IMPORTANT FIX (fixdep crash fix)
+          export HOSTCC=/usr/bin/gcc
+          export HOSTCXX=/usr/bin/g++
 
-          # safety fix for weird clang ld usage
+          # prevent clang toolchain from hijacking host ld
           export HOSTLD=/usr/bin/ld
 
           make O=out exynos9611-m31_defconfig
 
           make -j$(nproc) O=out \
+            ARCH=arm64 \
             CC=clang \
             LD=ld.lld \
             LLVM=1 \
             LLVM_IAS=1 \
-            HOSTCC=gcc \
-            HOSTCXX=g++ \
+            HOSTCC=/usr/bin/gcc \
+            HOSTCXX=/usr/bin/g++ \
             HOSTLD=/usr/bin/ld
 
       # =========================
-      # ARTIFACTS
+      # Upload artifacts
       # =========================
-      - name: Upload Image
+      - name: Upload kernel
         uses: actions/upload-artifact@v4
         with:
-          name: m31-kernel
+          name: M31-kernel
           path: |
             out/arch/arm64/boot/Image*
             out/arch/arm64/boot/dtbo*
