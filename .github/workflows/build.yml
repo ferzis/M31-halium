@@ -1,4 +1,4 @@
-name: M31 Halium Kernel CI (Stable)
+name: M31 Halium Kernel CI (Final)
 
 on:
   workflow_dispatch:
@@ -8,70 +8,88 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout source
         uses: actions/checkout@v4
 
       # =========================
-      # Dependencies
+      # DEPENDENCIES
       # =========================
-      - name: Install deps
+      - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y \
             bc bison build-essential flex \
             libssl-dev libelf-dev \
             python3 unzip zip \
-            cpio lz4 git wget curl
+            cpio lz4 git wget curl xz-utils
 
       # =========================
-      # STABLE CLANG (Neutron - CI safe)
+      # FULL LLVM TOOLCHAIN (STABLE)
       # =========================
-      - name: Download Clang
+      - name: Install LLVM 17
         run: |
-          git clone --depth=1 https://github.com/Neutron-Toolchains/clang-build.git clang
+          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+          tar -xf clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+          mv clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04 clang
 
       # =========================
-      # Build kernel
+      # BUILD
       # =========================
-      - name: Build
+      - name: Build kernel
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # toolchain
           export PATH=$PWD/clang/bin:$PATH
+
+          # LLVM toolchain
           export CC=clang
           export LD=ld.lld
           export LLVM=1
           export LLVM_IAS=1
 
-          # IMPORTANT FIX (fixdep crash fix)
+          # LLVM full tools (IMPORTANT FIX)
+          export AR=llvm-ar
+          export NM=llvm-nm
+          export OBJCOPY=llvm-objcopy
+          export OBJDUMP=llvm-objdump
+          export STRIP=llvm-strip
+
+          # HOST tools MUST NOT use clang
           export HOSTCC=/usr/bin/gcc
           export HOSTCXX=/usr/bin/g++
 
-          # prevent clang toolchain from hijacking host ld
+          # extra safety
           export HOSTLD=/usr/bin/ld
 
+          # config
           make O=out exynos9611-m31_defconfig
 
+          # build
           make -j$(nproc) O=out \
             ARCH=arm64 \
             CC=clang \
             LD=ld.lld \
             LLVM=1 \
             LLVM_IAS=1 \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            OBJDUMP=llvm-objdump \
+            STRIP=llvm-strip \
             HOSTCC=/usr/bin/gcc \
             HOSTCXX=/usr/bin/g++ \
             HOSTLD=/usr/bin/ld
 
       # =========================
-      # Upload artifacts
+      # ARTIFACTS
       # =========================
-      - name: Upload kernel
+      - name: Upload kernel artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: M31-kernel
+          name: m31-kernel
           path: |
             out/arch/arm64/boot/Image*
+            out/arch/arm64/boot/Image.gz*
             out/arch/arm64/boot/dtbo*
             out/arch/arm64/boot/dts/**/*
