@@ -1,4 +1,4 @@
-name: Build Halium Kernel
+name: M31 Halium Kernel CI
 
 on:
   workflow_dispatch:
@@ -8,48 +8,69 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
           sudo apt update
           sudo apt install -y \
             bc bison build-essential flex \
-            libssl-dev python3 unzip zip \
-            cpio lz4 gcc g++
+            libssl-dev libelf-dev \
+            python3 unzip zip \
+            cpio lz4 git curl wget
 
-      - name: Install Clang
+      # =========================
+      # STABLE CLANG (AOSP PREBUILT)
+      # =========================
+      - name: Download Clang
         run: |
-          git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
+          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/main/clang-r487747.tar.gz
+          mkdir clang
+          tar -xf clang-r487747.tar.gz -C clang
 
-      - name: Build
+      # =========================
+      # BUILD
+      # =========================
+      - name: Build Kernel
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
 
-          # clang only for kernel, NOT host tools
           export PATH=$PWD/clang/bin:$PATH
+
+          # IMPORTANT: use LLVM linker ONLY
           export CC=clang
           export LD=ld.lld
           export LLVM=1
           export LLVM_IAS=1
 
-          # IMPORTANT FIX
+          # HOST tools MUST use system compiler
           export HOSTCC=gcc
           export HOSTCXX=g++
+
+          # safety fix for weird clang ld usage
+          export HOSTLD=/usr/bin/ld
 
           make O=out exynos9611-m31_defconfig
 
           make -j$(nproc) O=out \
             CC=clang \
+            LD=ld.lld \
             LLVM=1 \
             LLVM_IAS=1 \
             HOSTCC=gcc \
-            HOSTCXX=g++
+            HOSTCXX=g++ \
+            HOSTLD=/usr/bin/ld
 
-      - name: Upload
+      # =========================
+      # ARTIFACTS
+      # =========================
+      - name: Upload Image
         uses: actions/upload-artifact@v4
         with:
-          name: kernel
+          name: m31-kernel
           path: |
-            out/arch/arm64/boot/*
+            out/arch/arm64/boot/Image*
+            out/arch/arm64/boot/dtbo*
+            out/arch/arm64/boot/dts/**/*
