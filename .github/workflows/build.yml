@@ -16,7 +16,7 @@ jobs:
           sudo apt install -y \
             bc bison build-essential flex \
             libssl-dev python3 unzip zip \
-            cpio lz4
+            cpio lz4 gcc g++
 
       - name: Install Clang
         run: |
@@ -26,14 +26,26 @@ jobs:
         run: |
           export ARCH=arm64
           export SUBARCH=arm64
+
+          # clang only for kernel, NOT host tools
           export PATH=$PWD/clang/bin:$PATH
+          export CC=clang
+          export LD=ld.lld
+          export LLVM=1
+          export LLVM_IAS=1
+
+          # IMPORTANT FIX
+          export HOSTCC=gcc
+          export HOSTCXX=g++
 
           make O=out exynos9611-m31_defconfig
 
           make -j$(nproc) O=out \
             CC=clang \
             LLVM=1 \
-            LLVM_IAS=1
+            LLVM_IAS=1 \
+            HOSTCC=gcc \
+            HOSTCXX=g++
 
       - name: Upload
         uses: actions/upload-artifact@v4
