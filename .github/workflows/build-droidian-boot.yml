@@ -2,10 +2,35 @@ name: M31 Droidian Halium Boot Image
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-droidian-boot.yml'
+      - 'arch/arm64/configs/exynos9611-m31_defconfig'
+      - 'arch/arm64/boot/dts/**'
+      - 'drivers/**'
+      - 'include/**'
+      - 'kernel/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'Kbuild'
+      - 'Kconfig'
+  pull_request:
+    paths:
+      - '.github/workflows/build-droidian-boot.yml'
+      - 'arch/arm64/configs/exynos9611-m31_defconfig'
+      - 'arch/arm64/boot/dts/**'
+      - 'drivers/**'
+      - 'include/**'
+      - 'kernel/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'Kbuild'
+      - 'Kconfig'
 
 jobs:
   build:
     runs-on: ubuntu-22.04
+
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -13,50 +38,129 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev \
+          sudo apt-get install -y \
+            bc bison build-essential flex libssl-dev libelf-dev \
             python3 cpio lz4 git wget curl xz-utils file
 
       - name: Install LLVM 17
         run: |
-          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+          wget -q \
+            https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+
           tar -xf clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
-          mv clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04 clang
+
+          mv \
+            clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04 \
+            clang
 
       - name: Build M31 kernel
         shell: bash
         run: |
           set -euo pipefail
+
           export ARCH=arm64
           export SUBARCH=arm64
           export PATH="$PWD/clang/bin:$PATH"
+
           export CC=clang
           export LD=ld.lld
           export LLVM=1
           export LLVM_IAS=1
-          export AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
-          export OBJDUMP=llvm-objdump STRIP=llvm-strip
-          export HOSTCC=/usr/bin/gcc HOSTCXX=/usr/bin/g++ HOSTLD=/usr/bin/ld
+
+          export AR=llvm-ar
+          export NM=llvm-nm
+          export OBJCOPY=llvm-objcopy
+          export OBJDUMP=llvm-objdump
+          export STRIP=llvm-strip
+
+          export HOSTCC=/usr/bin/gcc
+          export HOSTCXX=/usr/bin/g++
+          export HOSTLD=/usr/bin/ld
 
           make O=out exynos9611-m31_defconfig
-          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1
+
+          # Keep the Halium ABI, userspace mounts and M31 hardware drivers
+          # in the shipped kernel configuration.
+          for option in \
+            CONFIG_ANDROID=y \
+            CONFIG_ANDROID_BINDER_IPC=y \
+            'CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"' \
+            CONFIG_ASHMEM=y \
+            CONFIG_ION=y \
+            CONFIG_ION_EXYNOS=y \
+            CONFIG_BLK_DEV_INITRD=y \
+            CONFIG_RD_LZ4=y \
+            CONFIG_DEVTMPFS=y \
+            CONFIG_TMPFS=y \
+            CONFIG_EXT4_FS=y \
+            CONFIG_F2FS_FS=y \
+            CONFIG_OVERLAY_FS=y \
+            CONFIG_CGROUPS=y \
+            CONFIG_NAMESPACES=y \
+            CONFIG_SECCOMP=y \
+            CONFIG_SECCOMP_FILTER=y \
+            CONFIG_USB_CONFIGFS=y \
+            CONFIG_USB_CONFIGFS_F_FS=y \
+            CONFIG_USB_CONFIGFS_F_MTP=y \
+            CONFIG_USB_CONFIGFS_RNDIS=y \
+            CONFIG_SCSI_UFSHCD=y \
+            CONFIG_SCSI_UFS_EXYNOS=y \
+            CONFIG_EXYNOS_DECON_LCD_EA8076_M31=y \
+            CONFIG_TOUCHSCREEN_MELFAS_MSS100=y \
+            CONFIG_SND_SOC_SAMSUNG_EXYNOS9610=y \
+            CONFIG_BATTERY_SAMSUNG=y \
+            CONFIG_CHARGER_S2MU106=y \
+            CONFIG_SENSORS_SSP_M31=y \
+            CONFIG_SENSORS_A96T3X6_M31=y
+          do
+            grep -qx "$option" out/.config
+          done
+
+          make -j"$(nproc)" \
+            O=out \
+            ARCH=arm64 \
+            LLVM=1 \
+            LLVM_IAS=1
 
           test -s out/arch/arm64/boot/Image
-          test -s out/arch/arm64/boot/dts/exynos/exynos9610.dtb
+
+          test -s \
+            out/arch/arm64/boot/dts/exynos/exynos9610.dtb
+
+          test -s \
+            out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_00.dtbo
+
+          test -s \
+            out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_01.dtbo
+
+          test -s \
+            out/arch/arm64/boot/dts/samsung/exynos9611-m31_swa_open_00.dtbo
+
+          test -s \
+            out/arch/arm64/boot/dts/samsung/exynos9611-m31_swa_open_01.dtbo
 
       - name: Get Halium initramfs
         run: |
           set -euo pipefail
+
           mkdir -p tools
+
           curl -L --fail --retry 3 \
             https://github.com/halium/initramfs-tools-halium/releases/download/continuous/initrd.img-touch-arm64 \
             -o tools/initrd.img-touch-arm64
+
           file tools/initrd.img-touch-arm64
+
           test -s tools/initrd.img-touch-arm64
 
       - name: Get Android mkbootimg
         run: |
           set -euo pipefail
-          git clone --depth=1 https://android.googlesource.com/platform/system/tools/mkbootimg tools/mkbootimg
+
+          git clone --depth=1 \
+            https://android.googlesource.com/platform/system/tools/mkbootimg \
+            tools/mkbootimg
+
           test -s tools/mkbootimg/mkbootimg.py
           test -s tools/mkbootimg/unpack_bootimg.py
 
@@ -64,6 +168,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+
           mkdir -p dist
 
           python3 tools/mkbootimg/mkbootimg.py \
@@ -81,9 +186,39 @@ jobs:
             --cmdline 'init=/init androidboot.hardware=exynos9611 androidboot.selinux=permissive' \
             --output dist/boot.img
 
-          test "$(stat -c%s dist/boot.img)" -le 61865984
-          python3 tools/mkbootimg/unpack_bootimg.py --boot_img dist/boot.img --out dist/unpacked
-          grep -E 'boot magic|header version|kernel size|ramdisk size|dtb size|page size|cmdline' dist/unpacked/bootimg.cfg
+          test -s dist/boot.img
+
+          BOOT_SIZE="$(stat -c%s dist/boot.img)"
+
+          echo "Boot image size: ${BOOT_SIZE} bytes"
+
+          test "$BOOT_SIZE" -le 61865984
+
+          python3 tools/mkbootimg/unpack_bootimg.py \
+            --boot_img dist/boot.img \
+            --out dist/unpacked \
+            | tee dist/bootimg-info.txt
+
+          echo
+          echo "=== Boot image metadata ==="
+
+          grep -E \
+            'boot magic|kernel size|ramdisk size|dtb size|page size|command line args|boot image header version|product name' \
+            dist/bootimg-info.txt
+
+          echo
+          echo "=== M31 DTBO files ==="
+
+          for f in out/arch/arm64/boot/dts/samsung/*.dtbo; do
+            echo "--- $f"
+            file "$f"
+            ls -lh "$f"
+          done
+
+          echo
+          echo "=== Boot image contents ==="
+
+          find dist/unpacked -maxdepth 2 -type f -printf '%p\n' | sort
 
       - name: Upload Droidian boot artifacts
         uses: actions/upload-artifact@v4
@@ -91,8 +226,8 @@ jobs:
           name: m31-droidian-halium-boot
           path: |
             dist/boot.img
-            dist/unpacked/bootimg.cfg
+            dist/bootimg-info.txt
             out/.config
             out/arch/arm64/boot/Image
             out/arch/arm64/boot/dts/exynos/exynos9610.dtb
-            out/arch/arm64/boot/dts/exynos/exynos9611-m31_eur_open_00.dtbo
+            out/arch/arm64/boot/dts/samsung/*.dtbo

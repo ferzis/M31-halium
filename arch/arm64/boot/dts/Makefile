@@ -8,6 +8,8 @@ dtbo-y += samsung/exynos9611-f41_swa_open_00.dtbo
 dtbo-y += samsung/exynos9611-m31s_eur_open_00.dtbo
 dtbo-y += samsung/exynos9611-m31_eur_open_00.dtbo
 dtbo-y += samsung/exynos9611-m31_eur_open_01.dtbo
+dtbo-y += samsung/exynos9611-m31_swa_open_00.dtbo
+dtbo-y += samsung/exynos9611-m31_swa_open_01.dtbo
 dtbo-y += samsung/exynos9611-m21_swa_open_06.dtbo
 dtbo-y += samsung/exynos9611-m21_swa_open_00.dtbo
 
