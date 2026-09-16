@@ -1,0 +1,106 @@
+name: M31 Droidian Halium Boot Image
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential flex libssl-dev libelf-dev \
+            python3 cpio lz4 git wget curl xz-utils file
+
+      - name: Install LLVM 17
+        run: |
+          wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+          tar -xf clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
+          mv clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04 clang
+
+      - name: Build M31 kernel
+        shell: bash
+        run: |
+          set -euo pipefail
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export PATH="$PWD/clang/bin:$PATH"
+          export CC=clang
+          export LD=ld.lld
+          export LLVM=1
+          export LLVM_IAS=1
+          export AR=llvm-ar NM=llvm-nm OBJCOPY=llvm-objcopy
+          export OBJDUMP=llvm-objdump STRIP=llvm-strip
+          export HOSTCC=/usr/bin/gcc HOSTCXX=/usr/bin/g++ HOSTLD=/usr/bin/ld
+
+          make O=out exynos9611-m31_defconfig
+          ./scripts/ci/check-m31-halium-config.sh out/.config
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1
+
+          test -s out/arch/arm64/boot/Image
+          test -s out/arch/arm64/boot/dts/exynos/exynos9610.dtb
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_00.dtbo
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_01.dtbo
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_swa_open_00.dtbo
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_swa_open_01.dtbo
+
+      - name: Get Halium initramfs
+        run: |
+          set -euo pipefail
+          mkdir -p tools
+          curl -L --fail --retry 3 \
+            https://github.com/halium/initramfs-tools-halium/releases/download/continuous/initrd.img-touch-arm64 \
+            -o tools/initrd.img-touch-arm64
+          file tools/initrd.img-touch-arm64
+          test -s tools/initrd.img-touch-arm64
+
+      - name: Get Android mkbootimg
+        run: |
+          set -euo pipefail
+          git clone --depth=1 https://android.googlesource.com/platform/system/tools/mkbootimg tools/mkbootimg
+          test -s tools/mkbootimg/mkbootimg.py
+          test -s tools/mkbootimg/unpack_bootimg.py
+
+      - name: Package Samsung M31 Halium boot image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+
+          python3 tools/mkbootimg/mkbootimg.py \
+            --kernel out/arch/arm64/boot/Image \
+            --ramdisk tools/initrd.img-touch-arm64 \
+            --dtb out/arch/arm64/boot/dts/exynos/exynos9610.dtb \
+            --base 0x10000000 \
+            --kernel_offset 0x00008000 \
+            --ramdisk_offset 0x01000000 \
+            --tags_offset 0x00000100 \
+            --dtb_offset 0x01f00000 \
+            --pagesize 2048 \
+            --header_version 2 \
+            --board SRPSG30B004RU \
+            --cmdline 'init=/init androidboot.hardware=exynos9611 androidboot.selinux=permissive' \
+            --output dist/boot.img
+
+          test "$(stat -c%s dist/boot.img)" -le 61865984
+          python3 tools/mkbootimg/unpack_bootimg.py --boot_img dist/boot.img --out dist/unpacked
+          grep -E 'boot magic|header version|kernel size|ramdisk size|dtb size|page size|cmdline' dist/unpacked/bootimg.cfg
+
+      - name: Upload Droidian boot artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: m31-droidian-halium-boot
+          path: |
+            dist/boot.img
+            dist/unpacked/bootimg.cfg
+            out/.config
+            out/arch/arm64/boot/Image
+            out/arch/arm64/boot/dts/exynos/exynos9610.dtb
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_eur_open_00.dtbo
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_eur_open_01.dtbo
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_swa_open_00.dtbo
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_swa_open_01.dtbo
