@@ -38,10 +38,15 @@ jobs:
           export HOSTCC=/usr/bin/gcc HOSTCXX=/usr/bin/g++ HOSTLD=/usr/bin/ld
 
           make O=out exynos9611-m31_defconfig
+          ./scripts/ci/check-m31-halium-config.sh out/.config
           make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1
 
           test -s out/arch/arm64/boot/Image
           test -s out/arch/arm64/boot/dts/exynos/exynos9610.dtb
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_00.dtbo
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_01.dtbo
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_swa_open_00.dtbo
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_swa_open_01.dtbo
 
       - name: Get Halium initramfs
         run: |
@@ -96,3 +101,6 @@ jobs:
             out/arch/arm64/boot/Image
             out/arch/arm64/boot/dts/exynos/exynos9610.dtb
             out/arch/arm64/boot/dts/exynos/exynos9611-m31_eur_open_00.dtbo
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_eur_open_01.dtbo
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_swa_open_00.dtbo
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_swa_open_01.dtbo
