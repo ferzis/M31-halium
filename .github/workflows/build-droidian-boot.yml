@@ -38,10 +38,37 @@ jobs:
           export HOSTCC=/usr/bin/gcc HOSTCXX=/usr/bin/g++ HOSTLD=/usr/bin/ld
 
           make O=out exynos9611-m31_defconfig
+
+          # Keep the Halium ABI, userspace mounts and M31 hardware drivers
+          # in the shipped kernel configuration.  This is intentionally
+          # inline: the workflow must remain self-contained after checkout.
+          for option in \
+            CONFIG_ANDROID=y \
+            CONFIG_ANDROID_BINDER_IPC=y \
+            'CONFIG_ANDROID_BINDER_DEVICES="binder,hwbinder,vndbinder"' \
+            CONFIG_ASHMEM=y CONFIG_ION=y CONFIG_ION_EXYNOS=y \
+            CONFIG_BLK_DEV_INITRD=y CONFIG_RD_LZ4=y \
+            CONFIG_DEVTMPFS=y CONFIG_TMPFS=y CONFIG_EXT4_FS=y \
+            CONFIG_F2FS_FS=y CONFIG_OVERLAY_FS=y CONFIG_CGROUPS=y \
+            CONFIG_NAMESPACES=y CONFIG_SECCOMP=y CONFIG_SECCOMP_FILTER=y \
+            CONFIG_USB_CONFIGFS=y CONFIG_USB_CONFIGFS_F_FS=y \
+            CONFIG_USB_CONFIGFS_F_MTP=y CONFIG_USB_CONFIGFS_RNDIS=y \
+            CONFIG_SCSI_UFSHCD=y CONFIG_SCSI_UFS_EXYNOS=y \
+            CONFIG_EXYNOS_DECON_LCD_EA8076_M31=y \
+            CONFIG_TOUCHSCREEN_MELFAS_MSS100=y \
+            CONFIG_SND_SOC_SAMSUNG_EXYNOS9610=y \
+            CONFIG_BATTERY_SAMSUNG=y CONFIG_CHARGER_S2MU106=y \
+            CONFIG_SENSORS_SSP_M31=y CONFIG_SENSORS_A96T3X6_M31=y; do
+            grep -qx "$option" out/.config
+          done
           make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1
 
           test -s out/arch/arm64/boot/Image
           test -s out/arch/arm64/boot/dts/exynos/exynos9610.dtb
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_00.dtbo
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_01.dtbo
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_swa_open_00.dtbo
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_swa_open_01.dtbo
 
       - name: Get Halium initramfs
         run: |
@@ -96,3 +123,6 @@ jobs:
             out/arch/arm64/boot/Image
             out/arch/arm64/boot/dts/exynos/exynos9610.dtb
             out/arch/arm64/boot/dts/exynos/exynos9611-m31_eur_open_00.dtbo
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_eur_open_01.dtbo
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_swa_open_00.dtbo
+            out/arch/arm64/boot/dts/exynos/exynos9611-m31_swa_open_01.dtbo
