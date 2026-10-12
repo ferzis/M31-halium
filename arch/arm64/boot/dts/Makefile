@@ -25,8 +25,8 @@ dtbo-y += samsung/exynos9611-gta4xl_eur_open_03.dtbo
 
 targets += dtbs
 DTB_LIST  := $(dtb-y) $(dtbo-y)
-always    := $(DTB_LIST)
+always    := $(addprefix dts/,$(DTB_LIST))
 
-dtbs: $(addprefix $(obj)/, $(DTB_LIST))
+dtbs: $(addprefix $(obj)/dts/, $(DTB_LIST))
 
 clean-files := *.dtb*
