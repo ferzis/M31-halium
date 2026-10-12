@@ -41,7 +41,7 @@ jobs:
           ./scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/halium.config
           make O=out ARCH=arm64 olddefconfig
           bash scripts/ci/check-m31-halium-config.sh out/.config
-          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 Image dtbs
 
           test -s out/arch/arm64/boot/Image
           test -s out/arch/arm64/boot/dts/exynos/exynos9610.dtb
