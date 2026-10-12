@@ -1,7 +1,33 @@
-name: M31 Droidian Halium Boot Image
+name: M31 Halium Boot Image (kernel and initramfs)
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/build-droidian-boot.yml'
+      - 'arch/arm64/configs/exynos9611-m31_defconfig'
+      - 'arch/arm64/configs/halium.config'
+      - 'arch/arm64/boot/dts/**'
+      - 'drivers/**'
+      - 'include/**'
+      - 'kernel/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'Kbuild'
+      - 'Kconfig'
+  pull_request:
+    paths:
+      - '.github/workflows/build-droidian-boot.yml'
+      - 'arch/arm64/configs/exynos9611-m31_defconfig'
+      - 'arch/arm64/configs/halium.config'
+      - 'arch/arm64/boot/dts/**'
+      - 'drivers/**'
+      - 'include/**'
+      - 'kernel/**'
+      - 'scripts/**'
+      - 'Makefile'
+      - 'Kbuild'
+      - 'Kconfig'
 
 jobs:
   build:
@@ -22,7 +48,7 @@ jobs:
           tar -xf clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04.tar.xz
           mv clang+llvm-17.0.6-x86_64-linux-gnu-ubuntu-22.04 clang
 
-      - name: Build M31 kernel
+      - name: Configure and build M31 Halium kernel
         shell: bash
         run: |
           set -euo pipefail
@@ -38,12 +64,38 @@ jobs:
           export HOSTCC=/usr/bin/gcc HOSTCXX=/usr/bin/g++ HOSTLD=/usr/bin/ld
 
           make O=out exynos9611-m31_defconfig
+
+          # halium.config existed in the repository but was never merged into
+          # the actual kernel configuration.
+          scripts/kconfig/merge_config.sh -m -O out out/.config arch/arm64/configs/halium.config
+          make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
+
+          # Fail early if Kconfig dropped a required Halium namespace option.
+          for option in \
+            CONFIG_DEVTMPFS=y \
+            CONFIG_FHANDLE=y \
+            CONFIG_SYSVIPC=y \
+            CONFIG_IPC_NS=y \
+            CONFIG_NET_NS=y \
+            CONFIG_PID_NS=y \
+            CONFIG_USER_NS=y \
+            CONFIG_UTS_NS=y \
+            CONFIG_VT=y
+          do
+            grep -qx "$option" out/.config
+          done
+
           make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1
+
+          # Build DTB/DTBO explicitly rather than relying on incidental Kbuild
+          # behavior. M31's board-specific tree is an overlay (.dtbo).
+          make -j"$(nproc)" O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 dtbs
 
           test -s out/arch/arm64/boot/Image
           test -s out/arch/arm64/boot/dts/exynos/exynos9610.dtb
+          test -s out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_00.dtbo
 
-      - name: Get Halium initramfs
+      - name: Get generic Halium initramfs
         run: |
           set -euo pipefail
           mkdir -p tools
@@ -60,7 +112,7 @@ jobs:
           test -s tools/mkbootimg/mkbootimg.py
           test -s tools/mkbootimg/unpack_bootimg.py
 
-      - name: Package Samsung M31 Halium boot image
+      - name: Package diagnostic Halium boot image
         shell: bash
         run: |
           set -euo pipefail
@@ -85,14 +137,17 @@ jobs:
           python3 tools/mkbootimg/unpack_bootimg.py --boot_img dist/boot.img --out dist/unpacked
           grep -E 'boot magic|header version|kernel size|ramdisk size|dtb size|page size|cmdline' dist/unpacked/bootimg.cfg
 
-      - name: Upload Droidian boot artifacts
+          # Preserve the exact configuration used for this boot image.
+          cp out/.config dist/kernel.config
+
+      - name: Upload diagnostic artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: m31-droidian-halium-boot
+          name: m31-halium-diagnostic-boot
           path: |
             dist/boot.img
             dist/unpacked/bootimg.cfg
-            out/.config
+            dist/kernel.config
             out/arch/arm64/boot/Image
             out/arch/arm64/boot/dts/exynos/exynos9610.dtb
-            out/arch/arm64/boot/dts/exynos/exynos9611-m31_eur_open_00.dtbo
+            out/arch/arm64/boot/dts/samsung/exynos9611-m31_eur_open_00.dtbo
